@@ -6,7 +6,11 @@
 # ============================================
 
 import os
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+
+# Works both locally and on Streamlit Cloud
+ROOT = Path(__file__).parent.parent
+os.chdir(ROOT)
 
 import streamlit as st
 import pandas as pd
@@ -71,7 +75,8 @@ st.markdown("""
 # ── Load and prepare data ────────────────────
 @st.cache_data
 def load_data():
-    return pd.read_csv('data/shots_features.csv')
+    data_path = Path(__file__).parent.parent / 'data' / 'shots_features.csv'
+    return pd.read_csv(data_path)
 
 @st.cache_resource
 def train_model(df):
