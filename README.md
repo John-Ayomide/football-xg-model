@@ -2,7 +2,7 @@
 
 > Building an Expected Goals model from scratch using StatsBomb open data — replicating what elite football clubs use internally
 
-[![Open in Streamlit](https://john-xg-model.streamlit.app/)]
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://john-xg-model.streamlit.app)
 
 ---
 
