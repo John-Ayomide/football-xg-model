@@ -119,7 +119,7 @@ streamlit run dashboard/app.py
 
 ## Author
 
-**John Ayomide**
+**John Ayomide Aiyenomuro**
 
 - GitHub: [@John-Ayomide](https://github.com/John-Ayomide)
 - LinkedIn: [John Aiyenomuro](https://www.linkedin.com/in/john-aiyenomuro-19aa26211/?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3BOjRuavaNSE%2Bbrrf03mDzUA%3D%3D)
