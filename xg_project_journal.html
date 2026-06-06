@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Football xG Model — Project Journal</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;padding:40px 20px}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,160,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+.container{max-width:960px;margin:0 auto;position:relative;z-index:1}
+.header{margin-bottom:48px;border-bottom:1px solid #2a2a3a;padding-bottom:32px}
+.eyebrow{font-size:11px;color:#00e5a0;letter-spacing:3px;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.eyebrow::before{content:'';width:24px;height:1px;background:#00e5a0}
+h1{font-size:clamp(22px,4vw,36px);font-weight:700;line-height:1.2;margin-bottom:12px}
+h1 span{color:#00e5a0}
+.header-sub{color:#6b6b80;font-size:15px;margin-top:8px}
+.header-meta{font-size:14px;color:#6b6b80;display:flex;gap:24px;flex-wrap:wrap;margin-top:16px}
+.dot{width:6px;height:6px;border-radius:50%;background:#00e5a0;display:inline-block;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:48px}
+.stat-card{background:#111118;border:1px solid #2a2a3a;border-radius:12px;padding:20px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ac,#00e5a0)}
+.stat-label{font-size:11px;color:#6b6b80;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px}
+.stat-value{font-size:28px;font-weight:700;color:var(--ac,#00e5a0)}
+.stat-sub{font-size:12px;color:#6b6b80;margin-top:4px}
+.progress-wrap{background:#111118;border:1px solid #2a2a3a;border-radius:12px;padding:24px;margin-bottom:48px}
+.progress-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.progress-lbl{font-size:13px;color:#9999aa;text-transform:uppercase;letter-spacing:2px}
+.progress-pct{font-size:13px;color:#00e5a0}
+.progress-track{height:6px;background:#2a2a3a;border-radius:100px;overflow:hidden}
+.progress-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,#00e5a0,#7b61ff);transition:width 0.8s ease}
+.section-title{font-size:11px;color:#6b6b80;text-transform:uppercase;letter-spacing:3px;margin-bottom:20px;display:flex;align-items:center;gap:12px}
+.section-title::after{content:'';flex:1;height:1px;background:#2a2a3a}
+.days-grid{display:flex;flex-direction:column;gap:16px;margin-bottom:48px}
+.day-card{background:#111118;border:1px solid #2a2a3a;border-radius:12px;overflow:hidden;transition:border-color 0.2s}
+.day-card.completed{border-color:rgba(0,229,160,0.3)}
+.day-card.active{border-color:#7b61ff}
+.day-card.locked{opacity:0.5;pointer-events:none}
+.day-card.active,.day-card.completed{pointer-events:all}
+.day-header{padding:20px 24px;display:flex;align-items:center;gap:16px;cursor:pointer;user-select:none}
+.day-num{font-size:11px;color:#6b6b80;text-transform:uppercase;letter-spacing:2px;min-width:50px}
+.day-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;border:1px solid #2a2a3a;transition:all 0.3s}
+.day-card.completed .day-icon{background:rgba(0,229,160,0.15);border-color:#00e5a0;color:#00e5a0}
+.day-card.active .day-icon{background:rgba(123,97,255,0.15);border-color:#7b61ff;color:#7b61ff;animation:activePulse 2s infinite}
+.day-card.locked .day-icon{color:#6b6b80}
+@keyframes activePulse{0%,100%{box-shadow:0 0 0 0 rgba(123,97,255,0.4)}50%{box-shadow:0 0 0 6px rgba(123,97,255,0)}}
+.day-info{flex:1}
+.day-title-text{font-size:15px;font-weight:600;color:#e8e8f0;margin-bottom:4px}
+.day-subtitle-text{font-size:13px;color:#6b6b80}
+.day-date-text{font-size:11px;color:#6b6b80;white-space:nowrap}
+.day-body{display:none;border-top:1px solid #2a2a3a}
+.day-body.open{display:block}
+.tabs{display:flex;border-bottom:1px solid #2a2a3a;padding:0 24px;background:#0d0d15;overflow-x:auto}
+.tab-btn{font-size:12px;padding:12px 16px;cursor:pointer;border:none;background:none;color:#6b6b80;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;transition:all 0.15s;white-space:nowrap}
+.tab-btn:hover{color:#9999aa}
+.tab-btn.active{color:#00e5a0;border-bottom-color:#00e5a0}
+.tab-panel{display:none;padding:24px}
+.tab-panel.active{display:block}
+.tasks-list{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.task-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:#1a1a24;border-radius:8px;border:1px solid transparent;cursor:pointer;transition:all 0.15s;user-select:none}
+.task-item:hover{border-color:#2a2a3a}
+.task-item.done{opacity:0.6}
+.task-item.done .task-text{text-decoration:line-through;color:#6b6b80}
+.task-checkbox{width:18px;height:18px;border-radius:4px;border:1px solid #2a2a3a;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:11px;transition:all 0.15s;color:#6b6b80}
+.task-item.done .task-checkbox{background:#00e5a0;border-color:#00e5a0;color:#000}
+.task-text{font-size:14px;color:#9999aa;line-height:1.5;flex:1}
+.task-tag{margin-left:auto;font-size:10px;padding:2px 8px;border-radius:100px;background:#111118;border:1px solid #2a2a3a;color:#6b6b80;white-space:nowrap;flex-shrink:0}
+.findings-box{background:rgba(0,229,160,0.05);border:1px solid rgba(0,229,160,0.2);border-radius:8px;padding:16px;margin-top:16px}
+.findings-label{font-size:10px;color:#00e5a0;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px}
+.findings-box p{font-size:13px;color:#9999aa;line-height:1.6}
+.finding-stat{font-size:16px;font-weight:700;color:#00e5a0}
+.skills-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.skill-chip{padding:4px 12px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid}
+.sk-py{background:rgba(255,209,102,0.1);border-color:rgba(255,209,102,0.3);color:#ffd166}
+.sk-git{background:rgba(255,107,107,0.1);border-color:rgba(255,107,107,0.3);color:#ff6b6b}
+.sk-pd{background:rgba(0,229,160,0.1);border-color:rgba(0,229,160,0.3);color:#00e5a0}
+.sk-an{background:rgba(123,97,255,0.1);border-color:rgba(123,97,255,0.3);color:#7b61ff}
+.sk-fb{background:rgba(255,165,0,0.1);border-color:rgba(255,165,0,0.3);color:#ffa500}
+.commit-badge{display:inline-flex;align-items:center;gap:6px;background:#1a1a24;border:1px solid #2a2a3a;border-radius:6px;padding:6px 12px;font-size:11px;color:#6b6b80;margin-top:12px}
+.commit-dot{width:8px;height:8px;border-radius:50%;background:#ffd166;flex-shrink:0}
+.code-section-lbl{font-size:11px;color:#6b6b80;text-transform:uppercase;letter-spacing:2px;margin:0 0 14px}
+.code-block{background:#0a0a0f;border:1px solid #2a2a3a;border-left:3px solid #00e5a0;border-radius:0 8px 8px 0;padding:16px;margin-bottom:16px}
+.code-step-lbl{font-size:10px;color:#00e5a0;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px}
+.code-snippet{font-family:'Courier New',monospace;font-size:12px;color:#e8e8f0;line-height:1.8;white-space:pre-wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #2a2a3a}
+.code-explain{font-size:13px;color:#9999aa;line-height:1.8}
+.code-explain strong{color:#e8e8f0;font-weight:600}
+.code-explain code{background:#1a1a24;padding:1px 6px;border-radius:4px;font-family:'Courier New',monospace;font-size:11px;color:#00e5a0}
+.why-box{background:#1a1a24;border-radius:8px;padding:16px;margin-bottom:12px}
+.why-lbl{font-size:10px;color:#6b6b80;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+.why-txt{font-size:13px;color:#9999aa;line-height:1.8}
+.alt-box{background:#1a1a24;border:1px solid #2a2a3a;border-left:3px solid #7b61ff;border-radius:0 8px 8px 0;padding:16px;margin-bottom:12px}
+.alt-lbl{font-size:10px;color:#7b61ff;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+.alt-txt{font-size:13px;color:#9999aa;line-height:1.8}
+.alt-txt strong{color:#e8e8f0}
+.football-box{background:rgba(255,165,0,0.05);border:1px solid rgba(255,165,0,0.2);border-radius:8px;padding:16px;margin-bottom:12px}
+.football-lbl{font-size:10px;color:#ffa500;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+.football-txt{font-size:13px;color:#9999aa;line-height:1.8}
+.complete-day-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid rgba(0,229,160,0.3);background:rgba(0,229,160,0.1);color:#00e5a0;font-family:inherit;transition:all 0.2s;margin-top:16px}
+.complete-day-btn:hover{background:rgba(0,229,160,0.2)}
+.undo-day-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid rgba(255,107,107,0.3);background:rgba(255,107,107,0.1);color:#ff6b6b;font-family:inherit;transition:all 0.2s;margin-top:16px;margin-left:8px}
+.btn-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(100px);background:#00e5a0;color:#000;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;transition:transform 0.3s ease;z-index:9999;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.footer{border-top:1px solid #2a2a3a;padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.footer-left{font-size:11px;color:#6b6b80}
+.github-link{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:#111118;border:1px solid #2a2a3a;border-radius:8px;font-size:13px;color:#9999aa;text-decoration:none;transition:all 0.2s}
+.github-link:hover{border-color:#00e5a0;color:#00e5a0}
+@media(max-width:600px){.stats-row{grid-template-columns:repeat(2,1fr)}.day-header{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div class="container">
+
+<div class="header">
+  <div class="eyebrow">Portfolio Project 02 — Football Analytics</div>
+  <h1>Premier League <span>xG Model</span></h1>
+  <p class="header-sub">Building an Expected Goals model from scratch using StatsBomb open data — replicating what elite football clubs use internally</p>
+  <div class="header-meta">
+    <span><span class="dot"></span>&nbsp;In Progress</span>
+    <span>Started: June 2026</span>
+    <span>1 hour/day</span>
+    <span>10 days total</span>
+  </div>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card" style="--ac:#00e5a0"><div class="stat-label">Days Complete</div><div class="stat-value" id="stat-days">0</div><div class="stat-sub">of 10 planned</div></div>
+  <div class="stat-card" style="--ac:#7b61ff"><div class="stat-label">Tasks Ticked</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-sub">across all days</div></div>
+  <div class="stat-card" style="--ac:#ffa500"><div class="stat-label">Shots Analysed</div><div class="stat-value">839</div><div class="stat-sub">La Liga 2020/21</div></div>
+  <div class="stat-card" style="--ac:#ff6b6b"><div class="stat-label">Goals in Data</div><div class="stat-value">111</div><div class="stat-sub">13.2% conversion</div></div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-top">
+    <div class="progress-lbl">Overall Project Progress</div>
+    <div class="progress-pct" id="progress-pct">0%</div>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+</div>
+
+<div class="section-title">Daily Build Log</div>
+<div class="days-grid" id="days-grid">
+
+<!-- ===== DAY 1 ===== -->
+<div class="day-card" id="card-day-1">
+  <div class="day-header" onclick="tog(1)">
+    <span class="day-num">Day 01</span>
+    <div class="day-icon" id="icon-day-1">1</div>
+    <div class="day-info">
+      <div class="day-title-text">Project Setup &amp; GitHub</div>
+      <div class="day-subtitle-text">Folder structure, virtual environment, football libraries installed</div>
+    </div>
+    <span class="day-date-text" id="date-day-1">—</span>
+  </div>
+  <div class="day-body" id="body-day-1">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(1,'tasks')">Tasks</button>
+      <button class="tab-btn" onclick="switchTab(1,'code')">Code &amp; Explanation</button>
+      <button class="tab-btn" onclick="switchTab(1,'why')">Purpose &amp; Goals</button>
+    </div>
+    <div class="tab-panel active" id="tab-1-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t1-1" onclick="tick(1,1)"><div class="task-checkbox"></div><div class="task-text">Created project folder: football-xg-model with data/, notebooks/, src/, reports/, dashboard/</div><span class="task-tag">setup</span></li>
+        <li class="task-item" id="t1-2" onclick="tick(1,2)"><div class="task-checkbox"></div><div class="task-text">Created and activated Python virtual environment</div><span class="task-tag">setup</span></li>
+        <li class="task-item" id="t1-3" onclick="tick(1,3)"><div class="task-checkbox"></div><div class="task-text">Installed statsbombpy, mplsoccer, pandas, numpy, matplotlib, scikit-learn, xgboost, seaborn, jupyter</div><span class="task-tag">setup</span></li>
+        <li class="task-item" id="t1-4" onclick="tick(1,4)"><div class="task-checkbox"></div><div class="task-text">Created requirements.txt and .gitignore</div><span class="task-tag">setup</span></li>
+        <li class="task-item" id="t1-5" onclick="tick(1,5)"><div class="task-checkbox"></div><div class="task-text">Created GitHub repository: football-xg-model</div><span class="task-tag">git</span></li>
+        <li class="task-item" id="t1-6" onclick="tick(1,6)"><div class="task-checkbox"></div><div class="task-text">Pushed initial commit to GitHub</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="skills-chips">
+        <span class="skill-chip sk-py">Python venv</span>
+        <span class="skill-chip sk-fb">statsbombpy</span>
+        <span class="skill-chip sk-fb">mplsoccer</span>
+        <span class="skill-chip sk-git">git init</span>
+      </div>
+      <div class="commit-badge"><div class="commit-dot"></div>"Initial setup — football xG model project"</div>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(1)">&#10003; Mark Day 1 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(1)">&#8635; Undo</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-1-code">
+      <p class="code-section-lbl">Setup commands explained</p>
+      <div class="code-block">
+        <div class="code-step-lbl">Install football-specific libraries</div>
+        <div class="code-snippet">pip install statsbombpy mplsoccer pandas numpy matplotlib scikit-learn xgboost seaborn jupyter</div>
+        <div class="code-explain"><strong>statsbombpy</strong> — StatsBomb's official Python library. Gives direct API access to their free open data covering 60+ competitions. No manual downloads — data loads directly into pandas DataFrames with a single function call.<br><br><strong>mplsoccer</strong> — A Python library specifically for football visualisation. Draws professional pitch diagrams, shot maps, pass maps, and heatmaps. Used by professional analysts worldwide. Built on top of matplotlib so all your existing chart skills apply.<br><br>Everything else — pandas, numpy, scikit-learn, xgboost — you already know from Project 1. Same tools, new football domain.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-step-lbl">Safe git add pattern — never add venv</div>
+        <div class="code-snippet">git add notebooks/ data/ src/ reports/ dashboard/ requirements.txt .gitignore
+git commit -m "Initial setup — football xG model project"
+git push origin master</div>
+        <div class="code-explain"><strong>Why not git add . ?</strong> We learned from Project 1 that <code>git add .</code> accidentally adds the venv folder which contains large DLL files that exceed GitHub's 100MB limit. Always specify exactly which folders to add. This safe pattern prevents that problem entirely.</div>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-1-why">
+      <div class="why-box"><div class="why-lbl">Purpose of Day 1</div><div class="why-txt">Same professional foundation as Project 1 — but now with football-specific libraries. The statsbombpy and mplsoccer libraries are what professional football analysts use daily. Having them in your requirements.txt immediately signals to football clubs and analytics companies that you know the standard toolchain.</div></div>
+      <div class="football-box"><div class="football-lbl">Football analytics context</div><div class="football-txt">StatsBomb is one of the leading football data companies in the world. Their open data is the industry standard for portfolio projects and research. Companies like Liverpool, Chelsea, and Brentford use StatsBomb data. Building projects with their data shows you understand real-world football analytics workflows.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 2 ===== -->
+<div class="day-card" id="card-day-2">
+  <div class="day-header" onclick="tog(2)">
+    <span class="day-num">Day 02</span>
+    <div class="day-icon" id="icon-day-2">2</div>
+    <div class="day-info">
+      <div class="day-title-text">Data Exploration — StatsBomb Open Data</div>
+      <div class="day-subtitle-text">Loaded 839 shots from La Liga 2020/21 — 111 goals, 13.2% conversion rate</div>
+    </div>
+    <span class="day-date-text" id="date-day-2">—</span>
+  </div>
+  <div class="day-body" id="body-day-2">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(2,'tasks')">Tasks</button>
+      <button class="tab-btn" onclick="switchTab(2,'code')">Code &amp; Explanation</button>
+      <button class="tab-btn" onclick="switchTab(2,'why')">Purpose &amp; Goals</button>
+    </div>
+    <div class="tab-panel active" id="tab-2-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t2-1" onclick="tick(2,1)"><div class="task-checkbox"></div><div class="task-text">Created 01_data_exploration.ipynb</div><span class="task-tag">jupyter</span></li>
+        <li class="task-item" id="t2-2" onclick="tick(2,2)"><div class="task-checkbox"></div><div class="task-text">Loaded all available StatsBomb competitions — confirmed La Liga available</div><span class="task-tag">statsbomb</span></li>
+        <li class="task-item" id="t2-3" onclick="tick(2,3)"><div class="task-checkbox"></div><div class="task-text">Found La Liga competition_id = 11, season_id = 90 (2020/2021)</div><span class="task-tag">statsbomb</span></li>
+        <li class="task-item" id="t2-4" onclick="tick(2,4)"><div class="task-checkbox"></div><div class="task-text">Loaded 35 La Liga 2020/21 matches</div><span class="task-tag">data</span></li>
+        <li class="task-item" id="t2-5" onclick="tick(2,5)"><div class="task-checkbox"></div><div class="task-text">Extracted 839 shot events from all 35 matches using a loop</div><span class="task-tag">data</span></li>
+        <li class="task-item" id="t2-6" onclick="tick(2,6)"><div class="task-checkbox"></div><div class="task-text">Analysed shot outcomes — 111 goals (13.2% conversion rate)</div><span class="task-tag">analysis</span></li>
+        <li class="task-item" id="t2-7" onclick="tick(2,7)"><div class="task-checkbox"></div><div class="task-text">Added full markdown documentation to notebook</div><span class="task-tag">docs</span></li>
+        <li class="task-item" id="t2-8" onclick="tick(2,8)"><div class="task-checkbox"></div><div class="task-text">Committed and pushed to GitHub</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="findings-box">
+        <div class="findings-label">Key Finding from Day 2</div>
+        <p>Loaded <span class="finding-stat">839</span> shots from <span class="finding-stat">35</span> La Liga matches. Only <span class="finding-stat">111</span> resulted in goals — a raw conversion rate of <span class="finding-stat">13.2%</span>. This low rate proves that not all shots are equal — shot quality varies enormously, which is exactly what xG measures.</p>
+      </div>
+      <div class="skills-chips">
+        <span class="skill-chip sk-fb">sb.competitions()</span>
+        <span class="skill-chip sk-fb">sb.matches()</span>
+        <span class="skill-chip sk-fb">sb.events()</span>
+        <span class="skill-chip sk-pd">pd.concat()</span>
+      </div>
+      <div class="commit-badge"><div class="commit-dot"></div>"Notebook 1: Loaded 839 La Liga shots — 111 goals, 13.2% conversion rate"</div>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(2)">&#10003; Mark Day 2 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(2)">&#8635; Undo</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-2-code">
+      <p class="code-section-lbl">Every code cell explained</p>
+      <div class="code-block">
+        <div class="code-step-lbl">Cell 1 — Load competitions</div>
+        <div class="code-snippet">from statsbombpy import sb
+competitions = sb.competitions()
+print("Total competitions:", len(competitions))</div>
+        <div class="code-explain"><strong>What this does:</strong> <code>sb.competitions()</code> calls the StatsBomb API and returns a DataFrame of every competition and season in their open dataset.<br><br><strong>The NoAuthWarning:</strong> You will see a warning about credentials. This is completely normal — it simply confirms you are using the free open data tier rather than a paid credentials account. Ignore it entirely.<br><br><strong>Why this matters:</strong> Before loading any data you need the competition_id and season_id — these are the unique identifiers for every dataset call. Without them you cannot load matches or events.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-step-lbl">Cell 2 — Find La Liga IDs</div>
+        <div class="code-snippet">la_liga = competitions[competitions['competition_name'] == 'La Liga']
+print(la_liga[['competition_id', 'season_id', 'season_name']])</div>
+        <div class="code-explain"><strong>What this does:</strong> Filters the competitions DataFrame to only La Liga rows, then shows the competition_id and season_id for each available season.<br><br><strong>What we found:</strong> competition_id = 11 for La Liga. Season 2020/2021 has season_id = 90 — 18 seasons available going back to 1973/1974.<br><br><strong>Why 2020/2021?</strong> It is the most recent season in the open dataset with the richest, most complete event data. It also includes Messi's final Barcelona season.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-step-lbl">Cell 3 — Load matches</div>
+        <div class="code-snippet">matches = sb.matches(competition_id=11, season_id=90)
+print("Total matches:", len(matches))</div>
+        <div class="code-explain"><strong>What this does:</strong> Loads all match metadata for La Liga 2020/2021 — one row per match with home/away teams, scores, dates, stadiums, referees, and managers.<br><br><strong>Result:</strong> 35 matches. Note this is not a full 380-match season — StatsBomb's open data covers a subset of matches. 35 matches gives us 839 shots which is sufficient to train a reliable xG model.<br><br><strong>Why match metadata matters:</strong> We use the match_id column to load detailed event data for each individual match in the next step.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-step-lbl">Cell 4 — Extract all shot events</div>
+        <div class="code-snippet">all_shots = []
+for i, match_id in enumerate(matches['match_id']):
+    events = sb.events(match_id=match_id)
+    shots = events[events['type'] == 'Shot'].copy()
+    shots['match_id'] = match_id
+    all_shots.append(shots)
+shots_df = pd.concat(all_shots, ignore_index=True)</div>
+        <div class="code-explain"><strong>What this does:</strong> Loops through all 35 match IDs, loads every event for each match, filters to shots only, and combines into one DataFrame.<br><br><strong>What is an event?</strong> StatsBomb records every single action as an event — passes, dribbles, tackles, shots, goalkeeper actions. A typical match has 3,000+ events. We filter to shots only because our xG model only needs shot data.<br><br><strong>The loop pattern:</strong> We append each match's shots to a list then use <code>pd.concat()</code> at the end — this is significantly faster than concatenating inside the loop because it only touches memory once.<br><br><strong>111 columns per shot:</strong> Each shot contains location coordinates, technique, body part, assist type, defensive context, and StatsBomb's own xG value — everything we need to build our model.</div>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-2-why">
+      <div class="why-box"><div class="why-lbl">Purpose of Day 2</div><div class="why-txt">This is the foundation of the entire project. Before building any model we need to understand our raw material. The 13.2% raw conversion rate is the key insight — it proves that shot location and context matter enormously. A tap-in from 2 yards and a 40-yard effort are both "shots" in a simple count — but they have very different probabilities of resulting in a goal. That difference is what xG quantifies.</div></div>
+      <div class="football-box"><div class="football-lbl">Football analytics context</div><div class="football-txt">StatsBomb event data is the same data used by Premier League clubs, La Liga clubs, and national teams. Each shot has 111 features including tracking of defensive players, goalkeeper position, and detailed technique classifications. This level of data quality is what separates StatsBomb from simpler data providers. Building with this data shows you understand elite-level football analytics.</div></div>
+      <div class="alt-box"><div class="alt-lbl">Alternative data sources</div><div class="alt-txt"><strong>Understat</strong> provides xG data for major European leagues via web scraping — good for match-level xG comparisons. <strong>FBref</strong> provides aggregated player and team stats including xG per 90 — good for player analysis. <strong>Wyscout</strong> and <strong>Opta</strong> are commercial providers used by clubs — StatsBomb open data is the best free alternative for portfolio projects.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 3 ===== -->
+<div class="day-card" id="card-day-3">
+  <div class="day-header" onclick="tog(3)">
+    <span class="day-num">Day 03</span>
+    <div class="day-icon" id="icon-day-3">3</div>
+    <div class="day-info">
+      <div class="day-title-text">Feature Engineering</div>
+      <div class="day-subtitle-text">Extract shot distance, angle, and all xG features from raw event data</div>
+    </div>
+    <span class="day-date-text" id="date-day-3">—</span>
+  </div>
+  <div class="day-body" id="body-day-3">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(3,'tasks')">Tasks</button>
+      <button class="tab-btn" onclick="switchTab(3,'code')">Code &amp; Explanation</button>
+      <button class="tab-btn" onclick="switchTab(3,'why')">Purpose &amp; Goals</button>
+    </div>
+    <div class="tab-panel active" id="tab-3-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t3-1" onclick="tick(3,1)"><div class="task-checkbox"></div><div class="task-text">Created 02_feature_engineering.ipynb</div><span class="task-tag">jupyter</span></li>
+        <li class="task-item" id="t3-2" onclick="tick(3,2)"><div class="task-checkbox"></div><div class="task-text">Parsed x/y coordinates from StatsBomb location column</div><span class="task-tag">engineering</span></li>
+        <li class="task-item" id="t3-3" onclick="tick(3,3)"><div class="task-checkbox"></div><div class="task-text">Calculated shot distance from goal centre using Pythagoras</div><span class="task-tag">maths</span></li>
+        <li class="task-item" id="t3-4" onclick="tick(3,4)"><div class="task-checkbox"></div><div class="task-text">Calculated shot angle using trigonometry (arctan)</div><span class="task-tag">maths</span></li>
+        <li class="task-item" id="t3-5" onclick="tick(3,5)"><div class="task-checkbox"></div><div class="task-text">Created binary target variable: Goal = 1, Not Goal = 0</div><span class="task-tag">engineering</span></li>
+        <li class="task-item" id="t3-6" onclick="tick(3,6)"><div class="task-checkbox"></div><div class="task-text">Extracted: body part, technique, under pressure, assist type</div><span class="task-tag">engineering</span></li>
+        <li class="task-item" id="t3-7" onclick="tick(3,7)"><div class="task-checkbox"></div><div class="task-text">Created is_header binary feature</div><span class="task-tag">engineering</span></li>
+        <li class="task-item" id="t3-8" onclick="tick(3,8)"><div class="task-checkbox"></div><div class="task-text">Saved feature matrix to data/shots_features.csv</div><span class="task-tag">data</span></li>
+        <li class="task-item" id="t3-9" onclick="tick(3,9)"><div class="task-checkbox"></div><div class="task-text">Committed and pushed to GitHub</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="skills-chips">
+        <span class="skill-chip sk-pd">coordinate parsing</span>
+        <span class="skill-chip sk-an">Pythagoras theorem</span>
+        <span class="skill-chip sk-an">arctan trigonometry</span>
+        <span class="skill-chip sk-pd">binary encoding</span>
+      </div>
+      <div class="commit-badge"><div class="commit-dot"></div>"Notebook 2: Feature engineering — shot distance, angle, 10 xG features created"</div>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(3)">&#10003; Mark Day 3 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(3)">&#8635; Undo</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-3-code">
+      <p class="code-section-lbl">Every code cell explained</p>
+      <div class="code-block">
+        <div class="code-step-lbl">Parse x/y coordinates</div>
+        <div class="code-snippet">shots_df['x'] = shots_df['location'].apply(lambda loc: loc[0])
+shots_df['y'] = shots_df['location'].apply(lambda loc: loc[1])</div>
+        <div class="code-explain"><strong>What this does:</strong> The StatsBomb location column stores coordinates as a Python list like [85.3, 34.2]. We need to extract the x and y values separately as individual numeric columns.<br><br><strong>lambda loc: loc[0]</strong> — a small anonymous function that takes a location list and returns the first element (x coordinate). <code>loc[1]</code> returns the second element (y coordinate).<br><br><strong>StatsBomb pitch dimensions:</strong> The pitch is 120 x 80 yards. x=0 is the left goal line, x=120 is the right goal line. y=0 is the bottom touchline, y=80 is the top touchline. The goal centre is at approximately x=120, y=40.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-step-lbl">Calculate shot distance</div>
+        <div class="code-snippet">GOAL_X, GOAL_Y = 120, 40
+shots_df['distance'] = np.sqrt(
+    (shots_df['x'] - GOAL_X)**2 + 
+    (shots_df['y'] - GOAL_Y)**2
+)</div>
+        <div class="code-explain"><strong>What this does:</strong> Calculates the straight-line distance from each shot location to the centre of the goal using the Pythagorean theorem: distance = √((x2-x1)² + (y2-y1)²).<br><br><strong>Why distance matters for xG:</strong> Distance is one of the strongest predictors of goal probability. A shot from 5 yards scores far more often than one from 30 yards — even accounting for technique. Research shows goal probability roughly halves every 10 yards further from goal.<br><br><strong>Why goal centre at (120, 40)?</strong> StatsBomb's pitch is 120x80 yards. The goal is on the right side at x=120. The goal width spans y=36 to y=44, so the centre is y=40.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-step-lbl">Calculate shot angle</div>
+        <div class="code-snippet">shots_df['angle'] = np.arctan2(
+    shots_df['y'] - GOAL_Y,
+    shots_df['x'] - GOAL_X
+) * (180 / np.pi)
+shots_df['angle'] = shots_df['angle'].abs()</div>
+        <div class="code-explain"><strong>What this does:</strong> Calculates the angle between the shot location and the goal centre using arctan2 — converting from radians to degrees by multiplying by 180/π.<br><br><strong>Why angle matters for xG:</strong> A central shot directly in front of goal has a small angle (close to 0°) giving the shooter the full width of the goal. A wide shot from a tight angle has a large angle, making the goal appear much narrower. Central shots score significantly more often than wide angle shots.<br><br><strong>abs():</strong> We take the absolute value because angles to the left and right of goal are equally difficult — we only care about the magnitude, not the direction.</div>
+      </div>
+      <div class="code-block">
+        <div class="code-step-lbl">Create target variable and binary features</div>
+        <div class="code-snippet">shots_df['is_goal'] = (shots_df['shot_outcome'] == 'Goal').astype(int)
+shots_df['is_header'] = (shots_df['shot_body_part'] == 'Head').astype(int)
+shots_df['under_pressure'] = shots_df['under_pressure'].fillna(False).astype(int)</div>
+        <div class="code-explain"><strong>is_goal:</strong> Our target variable. 1 = shot was a goal, 0 = shot was not a goal. This is what the model learns to predict.<br><br><strong>is_header:</strong> Headers score at a lower rate than foot shots on average — approximately 8% vs 15%. Including this feature helps the model account for that difference.<br><br><strong>under_pressure:</strong> Shots taken under immediate defensive pressure score less often. StatsBomb records this as True/False — we convert to 1/0 for the model. fillna(False) handles cases where no pressure was recorded.</div>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-3-why">
+      <div class="why-box"><div class="why-lbl">Purpose of Day 3</div><div class="why-txt">Feature engineering is where football knowledge meets mathematics. The raw StatsBomb data gives us coordinates — but the model needs meaningful features derived from those coordinates. Calculating distance and angle transforms raw x/y positions into features that directly represent shot quality. This is the most analytically interesting day of the project.</div></div>
+      <div class="football-box"><div class="football-lbl">Football analytics context</div><div class="football-txt">The two most important features in any xG model are distance and angle. Every commercial xG model — StatsBomb, Opta, Wyscout — uses these as their foundation. Some advanced models add tracking data like goalkeeper position and defensive pressure. We start with the fundamentals and build up, which is exactly how professional analysts develop models.</div></div>
+      <div class="alt-box"><div class="alt-lbl">Alternative approaches</div><div class="alt-txt">More advanced xG models use <strong>postshot xG</strong> — which also considers where the goalkeeper was and the shot placement within the goal. <strong>Tracking data xG</strong> models use the position of every player on the pitch at the moment of the shot. We build a pre-shot model first — the industry standard starting point — before exploring these advanced approaches.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 4 ===== -->
+<div class="day-card" id="card-day-4">
+  <div class="day-header" onclick="tog(4)">
+    <span class="day-num">Day 04</span>
+    <div class="day-icon" id="icon-day-4">4</div>
+    <div class="day-info">
+      <div class="day-title-text">Shot Map Visualisations</div>
+      <div class="day-subtitle-text">Build professional pitch visualisations using mplsoccer</div>
+    </div>
+    <span class="day-date-text" id="date-day-4">—</span>
+  </div>
+  <div class="day-body" id="body-day-4">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(4,'tasks')">Tasks</button>
+      <button class="tab-btn" onclick="switchTab(4,'why')">Purpose &amp; Goals</button>
+    </div>
+    <div class="tab-panel active" id="tab-4-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t4-1" onclick="tick(4,1)"><div class="task-checkbox"></div><div class="task-text">Created 03_visualisation.ipynb</div><span class="task-tag">jupyter</span></li>
+        <li class="task-item" id="t4-2" onclick="tick(4,2)"><div class="task-checkbox"></div><div class="task-text">Built shot map showing all 839 shots on a pitch diagram</div><span class="task-tag">mplsoccer</span></li>
+        <li class="task-item" id="t4-3" onclick="tick(4,3)"><div class="task-checkbox"></div><div class="task-text">Colour coded shots: green = goal, red = no goal</div><span class="task-tag">viz</span></li>
+        <li class="task-item" id="t4-4" onclick="tick(4,4)"><div class="task-checkbox"></div><div class="task-text">Built goal probability heatmap by pitch zone</div><span class="task-tag">viz</span></li>
+        <li class="task-item" id="t4-5" onclick="tick(4,5)"><div class="task-checkbox"></div><div class="task-text">Built distance vs goal probability scatter chart</div><span class="task-tag">viz</span></li>
+        <li class="task-item" id="t4-6" onclick="tick(4,6)"><div class="task-checkbox"></div><div class="task-text">Built angle vs goal probability scatter chart</div><span class="task-tag">viz</span></li>
+        <li class="task-item" id="t4-7" onclick="tick(4,7)"><div class="task-checkbox"></div><div class="task-text">Saved all charts to reports/ folder</div><span class="task-tag">output</span></li>
+        <li class="task-item" id="t4-8" onclick="tick(4,8)"><div class="task-checkbox"></div><div class="task-text">Committed and pushed to GitHub</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(4)">&#10003; Mark Day 4 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(4)">&#8635; Undo</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-4-why">
+      <div class="why-box"><div class="why-lbl">Purpose of Day 4</div><div class="why-txt">Shot maps on a pitch diagram are the most recognisable football analytics visualisation. Every club presentation, every analytics article, every scouting report uses them. Building one with mplsoccer demonstrates you know the standard tool and can produce professional outputs. This is also the most screenshot-worthy content for your GitHub README and LinkedIn.</div></div>
+      <div class="football-box"><div class="football-lbl">Football analytics context</div><div class="football-txt">mplsoccer is maintained by Andrew Rowlinson and is used by professional analysts at clubs, betting companies, and media organisations. The pitch diagrams it produces are identical in style to what you see in The Athletic, Sky Sports analytics segments, and club presentations. Knowing this library is a direct employment signal to football analytics hiring managers.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 5 ===== -->
+<div class="day-card" id="card-day-5">
+  <div class="day-header" onclick="tog(5)">
+    <span class="day-num">Day 05</span>
+    <div class="day-icon" id="icon-day-5">5</div>
+    <div class="day-info">
+      <div class="day-title-text">xG Model Training</div>
+      <div class="day-subtitle-text">Train logistic regression and XGBoost xG models — compare against StatsBomb baseline</div>
+    </div>
+    <span class="day-date-text" id="date-day-5">—</span>
+  </div>
+  <div class="day-body" id="body-day-5">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(5,'tasks')">Tasks</button>
+      <button class="tab-btn" onclick="switchTab(5,'why')">Purpose &amp; Goals</button>
+    </div>
+    <div class="tab-panel active" id="tab-5-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t5-1" onclick="tick(5,1)"><div class="task-checkbox"></div><div class="task-text">Created 04_xg_model.ipynb</div><span class="task-tag">jupyter</span></li>
+        <li class="task-item" id="t5-2" onclick="tick(5,2)"><div class="task-checkbox"></div><div class="task-text">Loaded feature matrix from data/shots_features.csv</div><span class="task-tag">data</span></li>
+        <li class="task-item" id="t5-3" onclick="tick(5,3)"><div class="task-checkbox"></div><div class="task-text">Split data: 80% train, 20% test</div><span class="task-tag">ml</span></li>
+        <li class="task-item" id="t5-4" onclick="tick(5,4)"><div class="task-checkbox"></div><div class="task-text">Trained Logistic Regression baseline model</div><span class="task-tag">ml</span></li>
+        <li class="task-item" id="t5-5" onclick="tick(5,5)"><div class="task-checkbox"></div><div class="task-text">Trained XGBoost model</div><span class="task-tag">ml</span></li>
+        <li class="task-item" id="t5-6" onclick="tick(5,6)"><div class="task-checkbox"></div><div class="task-text">Evaluated both: AUC-ROC, Brier Score, log-loss</div><span class="task-tag">evaluation</span></li>
+        <li class="task-item" id="t5-7" onclick="tick(5,7)"><div class="task-checkbox"></div><div class="task-text">Compared model xG totals against StatsBomb xG baseline</div><span class="task-tag">validation</span></li>
+        <li class="task-item" id="t5-8" onclick="tick(5,8)"><div class="task-checkbox"></div><div class="task-text">Committed and pushed</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(5)">&#10003; Mark Day 5 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(5)">&#8635; Undo</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-5-why">
+      <div class="why-box"><div class="why-lbl">Purpose of Day 5</div><div class="why-txt">This is the core of the entire project. Training the actual xG model and comparing it against StatsBomb's own xG values is what proves the model works. Any candidate can say they "understand xG." Building one, validating it against an industry baseline, and explaining the methodology gap is what gets you hired.</div></div>
+      <div class="football-box"><div class="football-lbl">Why Logistic Regression first?</div><div class="football-txt">Logistic regression is the original xG modelling method — it directly outputs a probability between 0 and 1 which is mathematically interpretable. The coefficient on distance tells you exactly how much goal probability drops per yard. XGBoost captures non-linear relationships but is harder to interpret. Using both and comparing them shows methodological rigour.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 6 ===== -->
+<div class="day-card" id="card-day-6">
+  <div class="day-header" onclick="tog(6)">
+    <span class="day-num">Day 06</span>
+    <div class="day-icon" id="icon-day-6">6</div>
+    <div class="day-info">
+      <div class="day-title-text">Model Evaluation &amp; Validation</div>
+      <div class="day-subtitle-text">ROC curve, Brier score, calibration — validate against StatsBomb xG</div>
+    </div>
+    <span class="day-date-text" id="date-day-6">—</span>
+  </div>
+  <div class="day-body" id="body-day-6">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(6,'tasks')">Tasks</button>
+    </div>
+    <div class="tab-panel active" id="tab-6-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t6-1" onclick="tick(6,1)"><div class="task-checkbox"></div><div class="task-text">Plot ROC curve for both models</div><span class="task-tag">evaluation</span></li>
+        <li class="task-item" id="t6-2" onclick="tick(6,2)"><div class="task-checkbox"></div><div class="task-text">Calculate AUC-ROC and Brier Score</div><span class="task-tag">evaluation</span></li>
+        <li class="task-item" id="t6-3" onclick="tick(6,3)"><div class="task-checkbox"></div><div class="task-text">Plot calibration curve — are probabilities well-calibrated?</div><span class="task-tag">evaluation</span></li>
+        <li class="task-item" id="t6-4" onclick="tick(6,4)"><div class="task-checkbox"></div><div class="task-text">Compare our xG totals vs StatsBomb xG per team</div><span class="task-tag">validation</span></li>
+        <li class="task-item" id="t6-5" onclick="tick(6,5)"><div class="task-checkbox"></div><div class="task-text">Identify which teams over/underperformed their xG</div><span class="task-tag">analysis</span></li>
+        <li class="task-item" id="t6-6" onclick="tick(6,6)"><div class="task-checkbox"></div><div class="task-text">Commit and push</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(6)">&#10003; Mark Day 6 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(6)">&#8635; Undo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 7 ===== -->
+<div class="day-card" id="card-day-7">
+  <div class="day-header" onclick="tog(7)">
+    <span class="day-num">Day 07</span>
+    <div class="day-icon" id="icon-day-7">7</div>
+    <div class="day-info">
+      <div class="day-title-text">Player xG Analysis</div>
+      <div class="day-subtitle-text">Who over/underperformed their xG? Build player comparison tool</div>
+    </div>
+    <span class="day-date-text" id="date-day-7">—</span>
+  </div>
+  <div class="day-body" id="body-day-7">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(7,'tasks')">Tasks</button>
+    </div>
+    <div class="tab-panel active" id="tab-7-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t7-1" onclick="tick(7,1)"><div class="task-checkbox"></div><div class="task-text">Calculate xG per player across all 35 matches</div><span class="task-tag">analysis</span></li>
+        <li class="task-item" id="t7-2" onclick="tick(7,2)"><div class="task-checkbox"></div><div class="task-text">Compare actual goals vs xG — identify over/underperformers</div><span class="task-tag">analysis</span></li>
+        <li class="task-item" id="t7-3" onclick="tick(7,3)"><div class="task-checkbox"></div><div class="task-text">Build goals vs xG scatter chart with player labels</div><span class="task-tag">viz</span></li>
+        <li class="task-item" id="t7-4" onclick="tick(7,4)"><div class="task-checkbox"></div><div class="task-text">Build shot map for top 3 players showing shot quality</div><span class="task-tag">mplsoccer</span></li>
+        <li class="task-item" id="t7-5" onclick="tick(7,5)"><div class="task-checkbox"></div><div class="task-text">Write analytical summary of key player findings</div><span class="task-tag">docs</span></li>
+        <li class="task-item" id="t7-6" onclick="tick(7,6)"><div class="task-checkbox"></div><div class="task-text">Commit and push</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(7)">&#10003; Mark Day 7 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(7)">&#8635; Undo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 8 ===== -->
+<div class="day-card" id="card-day-8">
+  <div class="day-header" onclick="tog(8)">
+    <span class="day-num">Day 08</span>
+    <div class="day-icon" id="icon-day-8">8</div>
+    <div class="day-info">
+      <div class="day-title-text">Interactive xG Dashboard</div>
+      <div class="day-subtitle-text">Build Streamlit app — shot map, xG predictor, player comparison</div>
+    </div>
+    <span class="day-date-text" id="date-day-8">—</span>
+  </div>
+  <div class="day-body" id="body-day-8">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(8,'tasks')">Tasks</button>
+    </div>
+    <div class="tab-panel active" id="tab-8-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t8-1" onclick="tick(8,1)"><div class="task-checkbox"></div><div class="task-text">Build dashboard/app.py with dark theme</div><span class="task-tag">streamlit</span></li>
+        <li class="task-item" id="t8-2" onclick="tick(8,2)"><div class="task-checkbox"></div><div class="task-text">Add interactive shot map — click position to get xG value</div><span class="task-tag">streamlit</span></li>
+        <li class="task-item" id="t8-3" onclick="tick(8,3)"><div class="task-checkbox"></div><div class="task-text">Add player xG comparison chart</div><span class="task-tag">streamlit</span></li>
+        <li class="task-item" id="t8-4" onclick="tick(8,4)"><div class="task-checkbox"></div><div class="task-text">Add team xG vs goals table</div><span class="task-tag">streamlit</span></li>
+        <li class="task-item" id="t8-5" onclick="tick(8,5)"><div class="task-checkbox"></div><div class="task-text">Test locally</div><span class="task-tag">testing</span></li>
+        <li class="task-item" id="t8-6" onclick="tick(8,6)"><div class="task-checkbox"></div><div class="task-text">Deploy to Streamlit Cloud</div><span class="task-tag">deployment</span></li>
+        <li class="task-item" id="t8-7" onclick="tick(8,7)"><div class="task-checkbox"></div><div class="task-text">Add live link to README</div><span class="task-tag">readme</span></li>
+      </ul>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(8)">&#10003; Mark Day 8 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(8)">&#8635; Undo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 9 ===== -->
+<div class="day-card" id="card-day-9">
+  <div class="day-header" onclick="tog(9)">
+    <span class="day-num">Day 09</span>
+    <div class="day-icon" id="icon-day-9">9</div>
+    <div class="day-info">
+      <div class="day-title-text">README, CV Bullets &amp; Interview Prep</div>
+      <div class="day-subtitle-text">Professional documentation, STAR answers, LinkedIn post</div>
+    </div>
+    <span class="day-date-text" id="date-day-9">—</span>
+  </div>
+  <div class="day-body" id="body-day-9">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(9,'tasks')">Tasks</button>
+    </div>
+    <div class="tab-panel active" id="tab-9-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t9-1" onclick="tick(9,1)"><div class="task-checkbox"></div><div class="task-text">Write professional README with methodology section</div><span class="task-tag">readme</span></li>
+        <li class="task-item" id="t9-2" onclick="tick(9,2)"><div class="task-checkbox"></div><div class="task-text">Embed shot map screenshots in README</div><span class="task-tag">readme</span></li>
+        <li class="task-item" id="t9-3" onclick="tick(9,3)"><div class="task-checkbox"></div><div class="task-text">Write 4 CV bullet points for this project</div><span class="task-tag">cv</span></li>
+        <li class="task-item" id="t9-4" onclick="tick(9,4)"><div class="task-checkbox"></div><div class="task-text">Write STAR interview answer for football analytics roles</div><span class="task-tag">interview</span></li>
+        <li class="task-item" id="t9-5" onclick="tick(9,5)"><div class="task-checkbox"></div><div class="task-text">Draft LinkedIn post targeting football analytics audience</div><span class="task-tag">linkedin</span></li>
+        <li class="task-item" id="t9-6" onclick="tick(9,6)"><div class="task-checkbox"></div><div class="task-text">Commit and push</div><span class="task-tag">git</span></li>
+      </ul>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(9)">&#10003; Mark Day 9 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(9)">&#8635; Undo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DAY 10 ===== -->
+<div class="day-card" id="card-day-10">
+  <div class="day-header" onclick="tog(10)">
+    <span class="day-num">Day 10</span>
+    <div class="day-icon" id="icon-day-10">10</div>
+    <div class="day-info">
+      <div class="day-title-text">Final Polish — Portfolio Ready</div>
+      <div class="day-subtitle-text">Clean notebooks, pin on GitHub, publish on LinkedIn</div>
+    </div>
+    <span class="day-date-text" id="date-day-10">—</span>
+  </div>
+  <div class="day-body" id="body-day-10">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(10,'tasks')">Tasks</button>
+    </div>
+    <div class="tab-panel active" id="tab-10-tasks">
+      <ul class="tasks-list">
+        <li class="task-item" id="t10-1" onclick="tick(10,1)"><div class="task-checkbox"></div><div class="task-text">Restart and run all notebooks — confirm zero errors</div><span class="task-tag">polish</span></li>
+        <li class="task-item" id="t10-2" onclick="tick(10,2)"><div class="task-checkbox"></div><div class="task-text">Save all charts at 300 DPI for print quality</div><span class="task-tag">polish</span></li>
+        <li class="task-item" id="t10-3" onclick="tick(10,3)"><div class="task-checkbox"></div><div class="task-text">Final README review and spell check</div><span class="task-tag">readme</span></li>
+        <li class="task-item" id="t10-4" onclick="tick(10,4)"><div class="task-checkbox"></div><div class="task-text">Pin repository on GitHub profile alongside Project 1</div><span class="task-tag">github</span></li>
+        <li class="task-item" id="t10-5" onclick="tick(10,5)"><div class="task-checkbox"></div><div class="task-text">Publish LinkedIn post about the xG model</div><span class="task-tag">linkedin</span></li>
+        <li class="task-item" id="t10-6" onclick="tick(10,6)"><div class="task-checkbox"></div><div class="task-text">Update CV football analytics section with new bullet points</div><span class="task-tag">cv</span></li>
+        <li class="task-item" id="t10-7" onclick="tick(10,7)"><div class="task-checkbox"></div><div class="task-text">Update project journal HTML to mark project complete</div><span class="task-tag">docs</span></li>
+      </ul>
+      <div class="btn-row">
+        <button class="complete-day-btn" onclick="markComplete(10)">&#10003; Mark Day 10 Complete</button>
+        <button class="undo-day-btn" onclick="undoDay(10)">&#8635; Undo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="footer">
+  <div class="footer-left">John Ayomide &middot; Football xG Model &middot; Started June 2026</div>
+  <a class="github-link" href="https://github.com/John-Ayomide/football-xg-model" target="_blank">github.com/John-Ayomide/football-xg-model</a>
+</div>
+
+</div>
+
+<script>
+var STORE='xg_journal_v1';
+var COMMITS={1:1,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:1};
+
+function loadState(){try{return JSON.parse(localStorage.getItem(STORE))||{};}catch(e){return {};}}
+function saveState(s){try{localStorage.setItem(STORE,JSON.stringify(s));}catch(e){}}
+
+function applyState(){
+  var s=loadState();
+  var completedDays=0,doneTasks=0,totalCommits=0;
+  for(var d=1;d<=10;d++){
+    var dayDone=s['day_'+d]===true;
+    var card=document.getElementById('card-day-'+d);
+    var icon=document.getElementById('icon-day-'+d);
+    var date=document.getElementById('date-day-'+d);
+    var prevDone=d===1?true:s['day_'+(d-1)]===true;
+    if(dayDone){
+      card.className='day-card completed';
+      icon.innerHTML='&#10003;';
+      date.textContent=s['day_'+d+'_date']||'Complete';
+      completedDays++;
+      totalCommits+=COMMITS[d]||0;
+    } else if(prevDone){
+      card.className='day-card active';
+      icon.innerHTML='&#9654;';
+      date.textContent='Up next';
+    } else {
+      card.className='day-card locked';
+      icon.innerHTML=d;
+      date.textContent='Locked';
+    }
+    var taskEls=document.querySelectorAll('[id^="t'+d+'-"]');
+    taskEls.forEach(function(el){
+      var parts=el.id.split('-');
+      var key='task_'+d+'_'+parts[1];
+      var chk=el.querySelector('.task-checkbox');
+      if(s[key]){el.classList.add('done');chk.innerHTML='&#10003;';doneTasks++;}
+      else{el.classList.remove('done');chk.innerHTML='';}
+    });
+  }
+  document.getElementById('stat-days').textContent=completedDays;
+  document.getElementById('stat-tasks').textContent=doneTasks;
+  var pct=Math.round((completedDays/10)*100);
+  document.getElementById('progress-pct').textContent=pct+'%';
+  document.getElementById('progress-fill').style.width=pct+'%';
+}
+
+function tick(day,num){
+  var s=loadState();
+  var key='task_'+day+'_'+num;
+  s[key]=!s[key];
+  saveState(s);
+  applyState();
+}
+
+function markComplete(day){
+  var s=loadState();
+  s['day_'+day]=true;
+  var now=new Date();
+  s['day_'+day+'_date']=now.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  var taskEls=document.querySelectorAll('[id^="t'+day+'-"]');
+  taskEls.forEach(function(el){
+    var parts=el.id.split('-');
+    s['task_'+day+'_'+parts[1]]=true;
+  });
+  saveState(s);
+  applyState();
+  var next=day+1;
+  if(next<=10){
+    var nb=document.getElementById('body-day-'+next);
+    if(nb)nb.classList.add('open');
+  }
+  showToast('Day '+day+' complete! '+(day<10?'Day '+(day+1)+' unlocked':'Project complete!')+'  ✓');
+}
+
+function undoDay(day){
+  var s=loadState();
+  delete s['day_'+day];
+  delete s['day_'+day+'_date'];
+  saveState(s);
+  applyState();
+  showToast('Day '+day+' marked incomplete');
+}
+
+function tog(day){
+  var body=document.getElementById('body-day-'+day);
+  var card=document.getElementById('card-day-'+day);
+  if(card.classList.contains('locked'))return;
+  if(body)body.classList.toggle('open');
+}
+
+function switchTab(day,tab){
+  var body=document.getElementById('body-day-'+day);
+  if(!body)return;
+  body.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
+  body.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+  var panel=document.getElementById('tab-'+day+'-'+tab);
+  if(panel)panel.classList.add('active');
+  body.querySelectorAll('.tab-btn').forEach(function(b){
+    if(b.getAttribute('onclick')&&b.getAttribute('onclick').indexOf("'"+tab+"'")>-1)b.classList.add('active');
+  });
+}
+
+function showToast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');},3000);
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+  applyState();
+  for(var d=1;d<=10;d++){
+    var card=document.getElementById('card-day-'+d);
+    if(card&&card.classList.contains('active')){
+      var body=document.getElementById('body-day-'+d);
+      if(body)body.classList.add('open');
+      break;
+    }
+  }
+});
+</script>
+</body>
+</html>
