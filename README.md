@@ -2,7 +2,7 @@
 
 > Building an Expected Goals model from scratch using StatsBomb open data — replicating what elite football clubs use internally
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](YOUR_STREAMLIT_URL_HERE)
+[![Open in Streamlit](https://john-xg-model.streamlit.app/)]
 
 ---
 
@@ -122,4 +122,4 @@ streamlit run dashboard/app.py
 **John Ayomide**
 
 - GitHub: [@John-Ayomide](https://github.com/John-Ayomide)
-- LinkedIn: [https://www.linkedin.com/in/john-aiyenomuro-19aa26211/?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3BCpUqrDlrQ6GF6p6ln6fVVA%3D%3D](https://linkedin.com/in/yourprofile)
+- LinkedIn: [https://www.linkedin.com/in/john-aiyenomuro-19aa26211/?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3BOjRuavaNSE%2Bbrrf03mDzUA%3D%3D](https://linkedin.com/in/yourprofile)
